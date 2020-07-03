@@ -8,7 +8,6 @@
 
 Sender:
 ```sh
-# Sender
 $ echo "Hello" | zeropipe send my-pipe-id -c 5s
 ```
 
@@ -20,9 +19,12 @@ Hello
 
 If you want to authenticate (challenge) sender on receiver side you can use challenge token (`-t` flag or `ZEROPIPE_TOKEN` env variable).
 
+Sender:
 ```sh
 $ ZEROPIPE_TOKEN=secret echo "Hello" | zeropipe send my-pipe-id -c 5s
 ```
+
+Receiver:
 ```sh
 $ zeropipe recv my-pipe-id -t secret
 Hello
