@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  create_release:
+    name: Create release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create.outputs.upload_url }}
+    steps:
+    - name: Create
+      id: create
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: ${{ github.ref }}
+        draft: true
+        prerelease: false
+
+  publish:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: create_release
+    strategy:
+      matrix: 
+        GOOS: ["linux", "darwin", "windows"]
+        GOARCH: ["amd64"]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: Cache dependencies
+      uses: actions/cache@v2
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+    - name: Build
+      run: |
+        go build -v -o zeropipe .
+        zip zeropipe.zip zeropipe
+      env:
+        GOOS: ${{ matrix.GOOS }}
+        GOARCH: ${{ matrix.GOARCH }}
+    - name: Upload asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ needs.create_release.outputs.upload_url }} 
+        asset_path: ./zeropipe.zip
+        asset_name: zeropipe_${{ matrix.GOOS }}-${{ matrix.GOARCH }}.zip
+        asset_content_type: application/zip
