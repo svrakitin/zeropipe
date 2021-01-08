@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -25,7 +24,7 @@ var sendCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var id string
 		if len(args) == 0 {
-			idUUID, _ := uuid.NewRandom()
+			idUUID := uuid.Must(uuid.NewRandom())
 			id = idUUID.String()
 			fmt.Println(id)
 		} else {
@@ -37,7 +36,9 @@ var sendCmd = &cobra.Command{
 			return err
 		}
 
-		w := &multiWriteCloser{}
+		w := &multiWriteCloser{
+			writers: make(map[string]io.WriteCloser),
+		}
 		defer w.Close()
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -60,27 +61,20 @@ var sendCmd = &cobra.Command{
 				}
 				t.Reset(cooldown)
 
-				addr := fmt.Sprintf("%v:%v", entry.AddrIPv4[0].String(), entry.Port)
+				addr := fmt.Sprintf("%s:%d", entry.AddrIPv4[0].String(), entry.Port)
 				conn, err := net.Dial("tcp", addr)
 				if err != nil {
-					log.Print(err)
+					log.Printf("dial: %s", err)
 				} else {
-					w.Add(conn)
+					log.Printf("dial: %s", addr)
+					w.Add(addr, conn)
 				}
 			}
 		}()
 
 		select {
 		case <-t.C:
-			challengeToken := viper.GetString("token")
-			if challengeToken != "" {
-				w.Write([]byte(challengeToken))
-			}
 			_, err = io.Copy(w, os.Stdin)
-		}
-
-		if err == errNoReceivers {
-			return nil
 		}
 
 		return err
@@ -92,26 +86,24 @@ func init() {
 	viper.BindPFlag("cooldown", sendCmd.Flags().Lookup("cooldown"))
 }
 
-var errNoReceivers = errors.New("no receivers")
-
 type multiWriteCloser struct {
-	writers []io.WriteCloser
+	writers map[string]io.WriteCloser
 }
 
 func (mw *multiWriteCloser) Write(p []byte) (n int, err error) {
 	if len(mw.writers) == 0 {
-		return 0, errNoReceivers
+		return 0, io.ErrShortWrite
 	}
-	for i, w := range mw.writers {
-		if n, err = w.Write(p); err != nil || n != len(p) {
-			mw.writers = append(mw.writers[:i], mw.writers[i+1:]...)
+	for key, w := range mw.writers {
+		if n, err = w.Write(p); err != nil {
+			delete(mw.writers, key)
 		}
 	}
 	return len(p), nil
 }
 
-func (mw *multiWriteCloser) Add(w io.WriteCloser) {
-	mw.writers = append(mw.writers, w)
+func (mw *multiWriteCloser) Add(key string, w io.WriteCloser) {
+	mw.writers[key] = w
 }
 
 func (mw *multiWriteCloser) Close() error {

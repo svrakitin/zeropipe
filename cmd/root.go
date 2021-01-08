@@ -6,7 +6,7 @@ import (
 )
 
 const DefaultServiceRoot = "_zeropipe._tcp"
-const DefaultDomain = "local"
+const DefaultDomain = "local."
 
 var rootCmd = &cobra.Command{
 	Use:   "zeropipe",
@@ -16,9 +16,6 @@ var rootCmd = &cobra.Command{
 func init() {
 	viper.SetEnvPrefix("zeropipe")
 	viper.AutomaticEnv()
-
-	rootCmd.PersistentFlags().StringP("token", "t", "", "challenge token")
-	viper.BindPFlag("token", rootCmd.PersistentFlags().Lookup("token"))
 
 	rootCmd.AddCommand(sendCmd)
 	rootCmd.AddCommand(recvCmd)
